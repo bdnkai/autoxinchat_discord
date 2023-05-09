@@ -4,7 +4,6 @@ const {google} = require('googleapis');
 const fs = require('fs');
 const dotenv = require('dotenv').config();
 
-
 const cloudURL = process.env.CLOUD_RUN_URL;
 const discordToken = process.env.DISCORD_BOT_TOKEN;
 const sheetID = process.env.SPREADSHEET_ID;
@@ -38,34 +37,31 @@ const sheets = google.sheets({version: 'v4', auth});
 const SPREADSHEET_ID = `${sheetID}`;
 
 
-client.on('ready', () => {
-    console.log(`Logged in as ${client.user.tag}!`);
-});
 client.on('message', async (message) => {
     // Ignore messages from other bots
     if (message.author.bot) return;
-
-    console.log('Message received');
 
     // Fetch the message to ensure the attachments property is updated
     message = await message.fetch();
 
     const {imageUrl, bossName} = extractImageUrlAndBossName(message);
-    console.log('Image URL:', imageUrl, 'Boss Name:', bossName);
+    console.log(`imageUrl: ${imageUrl}`);
+    console.log(`bossName: ${bossName}`);
 
     if (imageUrl && bossName) {
         try {
-            console.log('Calling AutoXinChat API');
+            message.channel.send(`processing image...`)
             // Call your autoxinchat app with the image URL
             const response = await axios.get(`${cloudURL}=${imageUrl}`);
-            const usernames = response.data.usernames;
-            console.log('Usernames extracted:', usernames);
+            const usernames = response.data.names;
+            const names = usernames.filter((names, i)=> names)
 
             // Update attendance in Google Sheets
-            await updateAttendance(usernames);
+            await updateAttendance(names, bossName);
 
             // Send a confirmation message
-            message.reply('Attendance has been updated!');
+            message.reply(` ${names} these players have been marked for attendance on FB ${bossName} `)
+            //message.reply('Attendance has been updated!');
         } catch (error) {
             console.error(error);
             message.reply('An error occurred while processing the image.');
@@ -74,42 +70,57 @@ client.on('message', async (message) => {
 });
 
 
-
-
 client.login(`${discordToken}`);
 function extractImageUrlAndBossName(message) {
+    // Your logic to extract image URL from the message
     const attachment = message.attachments.first();
-    console.log(attachment)
     const imageUrl = attachment && (attachment.url.endsWith('.png') || attachment.url.endsWith('.jpg') || attachment.url.endsWith('.jpeg')) ? attachment.url : null;
-    console.log(imageUrl)
-    const commandRegex = /^!x(?:\s+(\w+))?/i;
-    console.log(commandRegex)
+    const commandRegex = /^!(\w+)/i
     const match = message.content.match(commandRegex);
-    const bossName = match && match[1] ? match[1] : null;
+    const bossName = match ? match[1] : null;
 
     return {imageUrl, bossName};
 }
 
 
-async function updateAttendance(usernames) {
+async function updateAttendance(usernames, bossernames) {
     // Loop through the usernames
     for (const username of usernames) {
         // Find the sheet matching the boss name
-        const sheetName = await findSheetNameForBoss(username);
+//        {lastCheck ? findUserRow(sheetName, lastCheck): null}
+
+
+        const sheetName = await findSheetNameForBoss(bossernames);
         if (sheetName) {
             // Find the row number for the user in AL9:AL range
+//            {lastCheck ? findUserRow(sheetName, lastCheck) : lastCheck && findUserRow}
+
             const rowNumber = await findUserRow(sheetName, username);
+            if(rowNumber){
+                await sheets.spreadsheets.values.update({
+                    spreadsheetId: SPREADSHEET_ID,
+                    range: `${sheetName}!AO${rowNumber}`,
+                    valueInputOption: 'USER_ENTERED',
+                    requestBody: {
+                        values: [['TRUE']],
+                    },
+                });
+            }
             if (rowNumber) {
                 // Update the corresponding cell in the AO9:AO range to 'TRUE'
                 await sheets.spreadsheets.values.update({
                     spreadsheetId: SPREADSHEET_ID,
                     range: `${sheetName}!AO${rowNumber}`,
-                    valueInputOption: 'RAW',
+                    valueInputOption: 'USER_ENTERED',
                     requestBody: {
                         values: [['TRUE']],
                     },
                 });
             } else {
+                const lastCheck = nameMap[username]
+
+//                const lastIndex = rows.findIndex(row => row[0] && row[0].toLowerCase() === lastCheck.toLowerCase());
+//                const lastNumber = lastIndex !== -1 ? lastIndex + 9 : null;
                 console.log(`User ${username} not found in sheet ${sheetName}`);
             }
         } else {
@@ -133,7 +144,14 @@ const sheetMap = {
     'CK': 'FB CAPRIS KING',
     'GUARDIAN': 'WB GUARDIAN'
 };
-
+const nameMap = {
+    '你爸爸' :'你爸爸 (New BBC)',
+    '你野':'你野爹 (Piggy)',
+    '叫我':'叫我爹 (IcedEarth)',
+    '破天命':'破天命 (Edi)',
+    'rovi':'Rovi (Canessa)',
+    '贪生恶杀':'贪生恶杀 (Muhui)'
+}
 
 async function findSheetNameForBoss(bossName) {
     const upperCaseBossName = bossName.toUpperCase();
@@ -146,5 +164,42 @@ async function findSheetNameForBoss(bossName) {
 }
 
 async function findUserRow(sheetName, username) {
-    // Your logic to find the row number for the user in the AL9:AL range
+    // Read the data in the AL9:AL range
+    const response = await sheets.spreadsheets.values.get({
+        spreadsheetId: SPREADSHEET_ID,
+        range: `${sheetName}!AL9:AL`,
+    });
+
+    const rows = response.data.values;
+    if (!rows) {
+        console.log('No data found in the specified range.');
+        return null;
+    }
+
+    // Find the index where the username matches (case-insensitive)
+    const rowIndex = rows.findIndex(row => row[0] && row[0].toLowerCase() === username);
+
+    // If a match is found, calculate the row number
+    const rowNumber = rowIndex !== -1 ? rowIndex + 9 : null;
+
+    if (rowNumber) {
+        console.log(`User ${username} found at row ${rowNumber} in sheet ${sheetName}`);
+        return rowNumber
+    }
+    const lastCheck = nameMap[username]
+        const lastNumber = await findUserRow(sheetName, lastCheck);
+        if(lastNumber){
+            await sheets.spreadsheets.values.update({
+                spreadsheetId: SPREADSHEET_ID,
+                range: `${sheetName}!AO${rowNumber}`,
+                valueInputOption: 'USER_ENTERED',
+                requestBody: {
+                    values: [['TRUE']],
+                },
+            });
+
+    }
+
+
 }
+
