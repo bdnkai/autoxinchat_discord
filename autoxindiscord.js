@@ -1,15 +1,24 @@
-const Discord = require('discord.js');
+const {Client, Intents} = require('discord.js');
 const axios = require('axios');
-const { google } = require('googleapis');
+const {google} = require('googleapis');
 const fs = require('fs');
+const dotenv = require('dotenv').config();
+
 
 const cloudURL = process.env.CLOUD_RUN_URL;
 const discordToken = process.env.DISCORD_BOT_TOKEN;
 const sheetID = process.env.SPREADSHEET_ID;
 const googleAC = process.env.GOOGLE_APPLICATION_CREDENTIALS;
 
-
-const client = new Discord.Client();
+const client = new Client({
+    intents: [
+        Intents.FLAGS.GUILDS,
+        Intents.FLAGS.GUILD_MESSAGE_CONTENT,
+        Intents.FLAGS.DIRECT_MESSAGE_CONTENT,
+        Intents.FLAGS.GUILD_MESSAGE_REACTIONS,
+        ],
+    partials: ['MESSAGE'],
+});
 
 // Load your service account JSON key file
 const serviceAccount = JSON.parse(fs.readFileSync(`${googleAC}`));
@@ -21,27 +30,36 @@ const auth = new google.auth.JWT(
     serviceAccount.private_key,
     ['https://www.googleapis.com/auth/spreadsheets'],
     null
-    );
+);
 
-const sheets = google.sheets({ version: 'v4', auth });
+const sheets = google.sheets({version: 'v4', auth});
 
 // Replace with your spreadsheet ID
 const SPREADSHEET_ID = `${sheetID}`;
 
+
 client.on('ready', () => {
     console.log(`Logged in as ${client.user.tag}!`);
 });
-
-client.on('messageCreate', async (message) => {
+client.on('message', async (message) => {
     // Ignore messages from other bots
     if (message.author.bot) return;
-    const { imageUrl, bossName } = extractImageUrlAndBossName(message);
-    
+
+    console.log('Message received');
+
+    // Fetch the message to ensure the attachments property is updated
+    message = await message.fetch();
+
+    const {imageUrl, bossName} = extractImageUrlAndBossName(message);
+    console.log('Image URL:', imageUrl, 'Boss Name:', bossName);
+
     if (imageUrl && bossName) {
         try {
+            console.log('Calling AutoXinChat API');
             // Call your autoxinchat app with the image URL
             const response = await axios.get(`${cloudURL}=${imageUrl}`);
             const usernames = response.data.usernames;
+            console.log('Usernames extracted:', usernames);
 
             // Update attendance in Google Sheets
             await updateAttendance(usernames);
@@ -55,18 +73,23 @@ client.on('messageCreate', async (message) => {
     }
 });
 
+
+
+
 client.login(`${discordToken}`);
-
 function extractImageUrlAndBossName(message) {
-    // Your logic to extract image URL from the message
-    const attachment = message.attachment.first();
+    const attachment = message.attachments.first();
+    console.log(attachment)
     const imageUrl = attachment && (attachment.url.endsWith('.png') || attachment.url.endsWith('.jpg') || attachment.url.endsWith('.jpeg')) ? attachment.url : null;
-    const commandRegex = /^!x\s+(\w+)/i;
+    console.log(imageUrl)
+    const commandRegex = /^!x(?:\s+(\w+))?/i;
+    console.log(commandRegex)
     const match = message.content.match(commandRegex);
-    const bossName = match ? match[1] : null;
+    const bossName = match && match[1] ? match[1] : null;
 
-    return { imageUrl, bossName };
+    return {imageUrl, bossName};
 }
+
 
 async function updateAttendance(usernames) {
     // Loop through the usernames
@@ -107,8 +130,8 @@ const sheetMap = {
     'BB': 'FB BLACKBLOOD',
     'TK': 'FB TOMB KING',
     'CENTE': 'FB CENTEPEDEUS',
-    'CK':'FB CAPRIS KING',
-    'GUARDIAN':'WB GUARDIAN'
+    'CK': 'FB CAPRIS KING',
+    'GUARDIAN': 'WB GUARDIAN'
 };
 
 
