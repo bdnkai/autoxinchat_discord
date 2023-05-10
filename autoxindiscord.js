@@ -59,35 +59,48 @@ client.on('message', async (message) => {
 
     // Combine attachments and URLs
     const imageURLs = attachments.map((attachment) => attachment.url).concat(urls);
-    console.log(imageURLs)
+    console.log(imageURLs);
 
     if (imageURLs.length > 0) {
         const { bossName } = extractImageUrlAndBossName(message);
-        console.log({bossName})
+        console.log({ bossName });
 
-        if ({bossName}) {
+        if (bossName) {
             try {
-                message.channel.send(`Processing ${imageURLs.length} image(s)...`);
+                const proc = await message.channel.send(`Processing ${imageURLs.length} image(s)...`);
 
-                for (const imageUrl of imageURLs) {
-                    // Call your autoxinchat app with the image URL
-                    const response = await axios.get(`${cloudURL}=${imageUrl}`);
-                    const dataNames = response.data.names;
-                    const usernames = dataNames.map((username)=> username)
-                    // Update attendance in Google Sheets
-                    await updateAttendance(usernames, bossName);
-                    // Send a confirmation message
-                    message.reply(`Attendance has been updated for ${sheetMap[bossName]} : ${usernames}!`);
-                }
+                // Process all image URLs concurrently
+                const allUsernames = await Promise.all(
+                    imageURLs.map(async (imageUrl) => {
+                        const response = await axios.get(`${cloudURL}=${imageUrl}`);
+                        const dataNames = response.data.names;
+                        proc.edit(`Sorting Duplicates...,[ ${dataNames} ]`)
+                        return dataNames.filter((username) => username);
+
+                    })
+                    );
+                // Flatten the allUsernames array and remove duplicates
+                const uniqueUsernames = [...new Set([].concat(...allUsernames))];
+
+                // Update attendance in Google Sheets
+                await updateAttendance(uniqueUsernames, bossName);
+                // Update attendance in Google Sheets
+
+                // Send a confirmation message
+                proc.edit(` ------- Completed! --------`)
+                message.reply(
+                    `  Attendance has been accounted for:
+                    ${uniqueUsernames}
+
+                    `
+                    );
             } catch (error) {
-                 message.reply('An error occurred while processing the images.');
+                message.reply('An error occurred while processing the images.');
                 console.error(error);
             }
         }
     }
 });
-
-
 
 
 async function getSheetId(sheetName) {
