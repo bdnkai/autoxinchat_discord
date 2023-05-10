@@ -36,41 +36,8 @@ const sheets = google.sheets({version: 'v4', auth});
 // Replace with your spreadsheet ID
 const SPREADSHEET_ID = `${sheetID}`;
 
-
-client.on('message', async (message) => {
-    // Ignore messages from other bots
-    if (message.author.bot) return;
-
-    // Fetch the message to ensure the attachments property is updated
-    message = await message.fetch();
-
-    const {imageUrl, bossName} = extractImageUrlAndBossName(message);
-    console.log(`imageUrl: ${imageUrl}`);
-    console.log(`bossName: ${bossName}`);
-
-    if (imageUrl && bossName) {
-        try {
-            message.channel.send(`processing image...`)
-            // Call your autoxinchat app with the image URL
-            const response = await axios.get(`${cloudURL}=${imageUrl}`);
-            const usernames = response.data.names;
-            const names = usernames.filter((names, i)=> names)
-
-            // Update attendance in Google Sheets
-            await updateAttendance(names, bossName);
-
-            // Send a confirmation message
-            message.reply(` ${names} these players have been marked for attendance on FB ${bossName} `)
-            //message.reply('Attendance has been updated!');
-        } catch (error) {
-            console.error(error);
-            message.reply('An error occurred while processing the image.');
-        }
-    }
-});
-
-
 client.login(`${discordToken}`);
+
 function extractImageUrlAndBossName(message) {
     // Your logic to extract image URL from the message
     const attachment = message.attachments.first();
@@ -83,66 +50,136 @@ function extractImageUrlAndBossName(message) {
 }
 
 
-async function updateAttendance(usernames, bossernames) {
-    // Loop through the usernames
-    for (const username of usernames) {
-        // Find the sheet matching the boss name
-//        {lastCheck ? findUserRow(sheetName, lastCheck): null}
+client.on('message', async (message) => {
+    // Ignore messages from other bots
+    if (message.author.bot) return;
+    // Check for attachments and URLs in the message
+    const attachments = message.attachments.array();
+    const urls = message.content.match(/https?:\/\/\S+/gi) || [];
 
+    // Combine attachments and URLs
+    const imageURLs = attachments.map((attachment) => attachment.url).concat(urls);
+    console.log(imageURLs)
 
-        const sheetName = await findSheetNameForBoss(bossernames);
-        if (sheetName) {
-            // Find the row number for the user in AL9:AL range
-//            {lastCheck ? findUserRow(sheetName, lastCheck) : lastCheck && findUserRow}
+    if (imageURLs.length > 0) {
+        const { bossName } = extractImageUrlAndBossName(message);
+        console.log({bossName})
 
-            const rowNumber = await findUserRow(sheetName, username);
-            if(rowNumber){
-                await sheets.spreadsheets.values.update({
-                    spreadsheetId: SPREADSHEET_ID,
-                    range: `${sheetName}!AO${rowNumber}`,
-                    valueInputOption: 'USER_ENTERED',
-                    requestBody: {
-                        values: [['TRUE']],
-                    },
-                });
+        if ({bossName}) {
+            try {
+                message.channel.send(`Processing ${imageURLs.length} image(s)...`);
+
+                for (const imageUrl of imageURLs) {
+                    // Call your autoxinchat app with the image URL
+                    const response = await axios.get(`${cloudURL}=${imageUrl}`);
+                    const dataNames = response.data.names;
+                    const usernames = dataNames.map((username)=> username)
+                    // Update attendance in Google Sheets
+                    await updateAttendance(usernames, bossName);
+                    // Send a confirmation message
+                    message.reply(`Attendance has been updated for ${sheetMap[bossName]} : ${usernames}!`);
+                }
+            } catch (error) {
+                 message.reply('An error occurred while processing the images.');
+                console.error(error);
             }
-            if (rowNumber) {
-                // Update the corresponding cell in the AO9:AO range to 'TRUE'
-                await sheets.spreadsheets.values.update({
-                    spreadsheetId: SPREADSHEET_ID,
-                    range: `${sheetName}!AO${rowNumber}`,
-                    valueInputOption: 'USER_ENTERED',
-                    requestBody: {
-                        values: [['TRUE']],
-                    },
-                });
-            } else {
-                const lastCheck = nameMap[username]
-
-//                const lastIndex = rows.findIndex(row => row[0] && row[0].toLowerCase() === lastCheck.toLowerCase());
-//                const lastNumber = lastIndex !== -1 ? lastIndex + 9 : null;
-                console.log(`User ${username} not found in sheet ${sheetName}`);
-            }
-        } else {
-            console.log(`Sheet not found for boss ${bossName}`);
         }
     }
+});
+
+
+
+
+async function getSheetId(sheetName) {
+    try {
+        const response = await sheets.spreadsheets.get({
+            spreadsheetId: SPREADSHEET_ID,
+            ranges: [sheetName],
+            fields: 'sheets(properties(sheetId,title))',
+        });
+
+        const sheet = response.data.sheets.find(sheet => sheet.properties.title === sheetName);
+
+        if (sheet) {
+            return sheet.properties.sheetId;
+        } else {
+            console.error(`Sheet ${sheetName} not found`);
+            return null;
+        }
+    } catch (error) {
+        console.error(`Error fetching sheet ID for ${sheetName}:`, error);
+        return null;
+    }
 }
+
+async function updateAttendance(usernamesArray, bossName) {
+    const sheetName = await findSheetNameForBoss(bossName);
+    const sheetId = await getSheetId(sheetName);
+
+    const getUsersToUpdate = async (usernames) => {
+        const usersToUpdate = await Promise.all(
+            usernames.map(async (username) => {
+                const rowNumber = await findUserRow(sheetName, username);
+                if (rowNumber) {
+                    return { rowNumber, value: true };
+                } else {
+                    console.log(`User ${username} not found in sheet ${sheetName}`);
+                    return null;
+                }
+            })
+            );
+        return usersToUpdate.filter((user) => user !== null);
+    };
+
+    // Merge all usernames arrays and filter out duplicates
+    const allUsernames = Array.from(new Set([].concat(...usernamesArray)));
+
+    // Loop through the usernames and find their row numbers
+    const usersToUpdate = await getUsersToUpdate(allUsernames);
+
+    // Check if there are any users to update
+    if (usersToUpdate.length > 0) {
+        // Create an array of update requests for each user
+        const requests = usersToUpdate.map(user => ({
+            updateCells: {
+                range: {
+                    sheetId: sheetId,
+                    startRowIndex: user.rowNumber - 1,
+                    endRowIndex: user.rowNumber,
+                    startColumnIndex: 40, // Column AO index
+                    endColumnIndex: 41
+                },
+                rows: [{ values: [{ userEnteredValue: { boolValue: user.value } }] }],
+                fields: 'userEnteredValue'
+            }
+        }));
+
+        // Update the specified cells in Google Sheets using batchUpdate
+        await sheets.spreadsheets.batchUpdate({
+            spreadsheetId: SPREADSHEET_ID,
+            requestBody: {
+                requests: requests
+            },
+        });
+    } else {
+        console.log(`Sheet not found for boss ${bossName}`);
+    }
+}
+
 
 const sheetMap = {
     'MOSHAR': 'FB MOSHAR',
     'LION': 'FB LIONHEART',
     'LAMOHI': 'FB LAMOHI',
-    'BULL': 'FB BULLFIEND',
-    'BIR': 'FB BIRYOUNG',
+    'BULL': 'FB BULL FIEND',
+    'LOTUS': 'FB BIRYONG',
     'INFERNAL': 'FB INFERNAL',
     'LONGBOW': 'FB LONGBOW',
     'SERPANT': 'FB SERPANT MAID',
     'BB': 'FB BLACKBLOOD',
     'TK': 'FB TOMB KING',
-    'CENTE': 'FB CENTEPEDEUS',
-    'CK': 'FB CAPRIS KING',
-    'GUARDIAN': 'WB GUARDIAN'
+    'CENT': 'FB CENTEPEDEUS',
+    'CK': 'FB CAPRIS KING'
 };
 const nameMap = {
     '你爸爸' :'你爸爸 (New BBC)',
@@ -176,30 +213,21 @@ async function findUserRow(sheetName, username) {
         return null;
     }
 
+    // Check if there's a mapping for the username
+    const mappedUsername = nameMap[username] || username;
+
     // Find the index where the username matches (case-insensitive)
-    const rowIndex = rows.findIndex(row => row[0] && row[0].toLowerCase() === username);
+    const rowIndex = rows.findIndex(row => row[0] && row[0].toLowerCase() === mappedUsername.toLowerCase());
 
     // If a match is found, calculate the row number
     const rowNumber = rowIndex !== -1 ? rowIndex + 9 : null;
 
     if (rowNumber) {
-        console.log(`User ${username} found at row ${rowNumber} in sheet ${sheetName}`);
-        return rowNumber
-    }
-    const lastCheck = nameMap[username]
-        const lastNumber = await findUserRow(sheetName, lastCheck);
-        if(lastNumber){
-            await sheets.spreadsheets.values.update({
-                spreadsheetId: SPREADSHEET_ID,
-                range: `${sheetName}!AO${rowNumber}`,
-                valueInputOption: 'USER_ENTERED',
-                requestBody: {
-                    values: [['TRUE']],
-                },
-            });
-
+        console.log(`User ${mappedUsername} found at row ${rowNumber} in sheet ${sheetName}`);
+    } else {
+        console.log(`User ${mappedUsername} not found in sheet ${sheetName}`);
     }
 
-
+    return rowNumber;
 }
 
