@@ -1,0 +1,4 @@
+node_modules
+hidden_servce_key.json
+.git
+.env
