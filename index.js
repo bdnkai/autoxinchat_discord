@@ -3,7 +3,6 @@ const axios = require('axios');
 const {google} = require('googleapis');
 const fs = require('fs');
 const dotenv = require('dotenv').config();
-const keyFile = "/app/keys/integral-league-386204-21c67a6bc6bd.json";
 
 
 const cloudURL = process.env.CLOUD_RUN_URL;
