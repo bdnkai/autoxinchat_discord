@@ -83,56 +83,25 @@ client.on('message', async (message) => {
         } else if (command === 'hello') {
             message.reply(`
 
-            Hello! I am the automated attendance bot for boss fights :)
+            Hello! I am the automated attendance bot for boss fights
 
-            I run base on Image Recognition, so to use me successfully,
+            I operate solely on Image Recognition, to use me successfully,
             please follow the instructions below:
 
             1. Screen Shot the chat box with the snippet tool and past it into Discord.
 
-            2. Activate me by sending ! + FB name in lowercase,
+            2. Activate me by sending " !  " following the boss' name in lowercase,
             [ ex: for Moshar, type:   !moshar  ].
 
-            3. Make sure the image is clear, then hit Send,
-            you can send me multiple images as well, but it might take longer!
+            3. Make sure the image is clear, then send it,
 
-            4. You'll be notified when the job is completed
+            I can also handle multiple images at once!
+
+            4. When the job is completed, I will @  mention you.
 
             Need the command for each boss? send: "  !com  "`);
         }
-         else if (command === 'bdn') {
-             const troll = await message.reply(
-                 `  Do you know what BDN stands for?
-             ....
-             ....
-             ....
-             ....
-             ....
-             ....
-             8==================================================================================D
-             .....       BIG DI....MuddaFuQuh   LOLOLOL
-             8==================================================================================D
 
-             `)
-             if(troll){
-                 return troll.edit('too slow! 🤣🤣🤣')
-             }
-         }
-        else if (command === 'lmao') {
-            const troll = await message.reply(
-                `  Do you know what BDN stands for?
-             ....
-             ....
-             ....
-             ....
-             ....
-             ....
-             8==================================================================================D
-             .....       BIG DI....MuddaFuQuh   LOLOLOL
-             8==================================================================================D
-
-             `)
-            }
     }
 
     
@@ -251,6 +220,8 @@ async function updateAttendance(usernamesArray, bossName) {
 
     // Check if there are any users to update
     if (usersToUpdate.length > 0) {
+        try{
+
         // Create an array of update requests for each user
         const requests = usersToUpdate.map(user => ({
             updateCells: {
@@ -266,13 +237,18 @@ async function updateAttendance(usernamesArray, bossName) {
             }
         }));
 
+
         // Update the specified cells in Google Sheets using batchUpdate
         await sheets.spreadsheets.batchUpdate({
             spreadsheetId: SPREADSHEET_ID,
             requestBody: {
                 requests: requests
             },
-        });
+        })
+        }catch(error){
+            return error, 400
+        }
+
     } else {
         console.log(`Sheet not found for boss ${bossName}`);
     }
