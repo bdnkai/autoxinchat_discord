@@ -31,7 +31,7 @@ const auth = new google.auth.JWT(
     serviceAccount.private_key,
     ['https://www.googleapis.com/auth/spreadsheets'],
     null
-);
+    );
 
 const sheets = google.sheets({version: 'v4', auth});
 
@@ -104,9 +104,9 @@ client.on('message', async (message) => {
 
     }
 
-    
+
     //==========================================   IMAGE PROCESSING  ==========================================
-    
+
     // Check for attachments and URLs in the message
     const attachments = message.attachments.array();
     const urls = message.content.match(/https?:\/\/\S+/gi) || [];
@@ -139,12 +139,12 @@ client.on('message', async (message) => {
                 // Update attendance in Google Sheets
                 await updateAttendance(uniqueUsernames, bossName);
                 // Update attendance in Google Sheets
-                
+
                 // Send a confirmation message
                 proc.edit(` ------- Completed! --------`)
                 message.reply(
                     `  Attendance has been accounted for ${sheetMap[bossName.toUpperCase()]}:
-                    
+
                     ${uniqueResponse}
 
                     `
@@ -195,8 +195,8 @@ async function updateAttendance(usernamesArray, bossName) {
     }
 
     const { usernameColumnIndex, attendanceColumnIndex } = columnIndices;
-    
-    
+
+
     const getUsersToUpdate = async (usernames) => {
         const usersToUpdate = await Promise.all(
             usernames.map(async (username) => {
@@ -222,29 +222,29 @@ async function updateAttendance(usernamesArray, bossName) {
     if (usersToUpdate.length > 0) {
         try{
 
-        // Create an array of update requests for each user
-        const requests = usersToUpdate.map(user => ({
-            updateCells: {
-                range: {
-                    sheetId: sheetId,
-                    startRowIndex: user.rowNumber - 1,
-                    endRowIndex: user.rowNumber,
-                    startColumnIndex: attendanceColumnIndex,
-                    endColumnIndex: attendanceColumnIndex + 1
+            // Create an array of update requests for each user
+            const requests = usersToUpdate.map(user => ({
+                updateCells: {
+                    range: {
+                        sheetId: sheetId,
+                        startRowIndex: user.rowNumber - 1,
+                        endRowIndex: user.rowNumber,
+                        startColumnIndex: attendanceColumnIndex,
+                        endColumnIndex: attendanceColumnIndex + 1
+                    },
+                    rows: [{ values: [{ userEnteredValue: { boolValue: user.value } }] }],
+                    fields: 'userEnteredValue'
+                }
+            }));
+
+
+            // Update the specified cells in Google Sheets using batchUpdate
+            await sheets.spreadsheets.batchUpdate({
+                spreadsheetId: SPREADSHEET_ID,
+                requestBody: {
+                    requests: requests
                 },
-                rows: [{ values: [{ userEnteredValue: { boolValue: user.value } }] }],
-                fields: 'userEnteredValue'
-            }
-        }));
-
-
-        // Update the specified cells in Google Sheets using batchUpdate
-        await sheets.spreadsheets.batchUpdate({
-            spreadsheetId: SPREADSHEET_ID,
-            requestBody: {
-                requests: requests
-            },
-        })
+            })
         }catch(error){
             return error, 400
         }
@@ -253,7 +253,6 @@ async function updateAttendance(usernamesArray, bossName) {
         console.log(`Sheet not found for boss ${bossName}`);
     }
 }
-
 //==========================================   NAME MAPPING  ==========================================
 
 const sheetMap = {
@@ -277,7 +276,8 @@ const nameMap = {
     '破天命':'破天命 (Edi)',
     'rovi':'Rovi (Canessa)',
     '贪生恶杀':'贪生恶杀 (Muhui)',
-    'KneeHowMang':'KneeHowMang肏你媽'
+    'KneeHowMang':'KneeHowMang肏你媽',
+    'ME请你妈ME傅你妈':'KneeHowMang肏你媽'
 }
 
 async function findSheetNameForBoss(bossName) {
@@ -307,7 +307,7 @@ async function getColumnIndices(sheetId, sheetName) {
         }
 
         const attendanceIndex = rowValues.findIndex(cellValue => cellValue === "ATTENDANCE");
-        
+
         if (attendanceIndex === -1) {
             console.error(`"Attendance" not found in row 8 for sheet ${sheetName}`);
             return null;
@@ -343,7 +343,7 @@ async function findUserRow(sheetName, username, column) {
         spreadsheetId: SPREADSHEET_ID,
         range: `${sheetName}!${searchColumn}9:${searchColumn}`,
     });
-    
+
     const rows = response.data.values;
     if (!rows) {
         console.log('No data found in the specified range.');
@@ -365,4 +365,5 @@ async function findUserRow(sheetName, username, column) {
 
     return rowNumber;
 }
+
 
