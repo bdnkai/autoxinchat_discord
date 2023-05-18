@@ -40,13 +40,15 @@ const SPREADSHEET_ID = `${sheetID}`;
 
 client.login(`${discordToken}`);
 
+const global_command = ['com', 'teabug', 'hi', 'bye', 'rate', 'names']
 function extractImageUrlAndBossName(message) {
     // Your logic to extract image URL from the message
     const attachment = message.attachments.first();
     const imageUrl = attachment && (attachment.url.endsWith('.png') || attachment.url.endsWith('.jpg') || attachment.url.endsWith('.jpeg')) ? attachment.url : null;
     const commandRegex = /^!(\w+)/i
     const match = message.content.match(commandRegex);
-    const bossName = match ? match[1] : null;
+    const bossName = match ? match[1] : teaMode;
+    const teaMode = bossName == global_command[1] ? null : bossName 
 
     return {imageUrl, bossName};
 }
@@ -55,12 +57,20 @@ function extractImageUrlAndBossName(message) {
 client.on('message', async (message) => {
     // Ignore messages from other bots
     if (message.author.bot) return;
+    const regex = /^!(\w+)/i
+    const activation = message.content.match(regex);
+    const activeName = activation ? activation[1] : null;
 
     // Check if the message starts with the command prefix
     if (message.content.startsWith('!')) {
-        const command = message.content.slice(1).toLowerCase();
+        // console.log(message.content)
+        const lineList = []
+        const activator = message.content.slice(1).toLowerCase();
+        const command = activator.split(' '[0])[0]
+        const args = activator.split(' '[0])[1]
 
-        if (command === 'com') {
+
+        if (command === global_command[0]) {
             // Replace the example commands with the actual ones
             message.reply(`List of commands, commands are always in lower-case
             and starts with an exclamation mark " !  "
@@ -80,31 +90,98 @@ client.on('message', async (message) => {
 
 
             `);
-        } else if (command === 'hello') {
-            message.reply(`
+        } else if (command === global_command[1]) {
+            message.reply(` 
+                was there a mistake?
+                ${cloudURL}/debug?url=${args}
+            
+            `)
+            try{
+                const res = await axios.get(`${cloudURL}/debug?url=${args}`)
+                const dataMessage = await res.data.message[0]
+                const dataList = await res.data.message[1]
+                console.log(dataMessage, dataList)
+                const debuggingResults = await dataMessage.map(async (list)=>{
+                    await message.channel.send("`"+`${list}`+"`")
 
-            Hello! I am the automated attendance bot for boss fights
+                })
+            }catch(error){
+                console.error(error)
+            }
+            
 
-            I operate solely on Image Recognition, to use me successfully,
-            please follow the instructions below:
 
-            1. Screen Shot the chat box with the snippet tool and past it into Discord.
 
-            2. Activate me by sending " !  " following the boss' name in lowercase,
-            [ ex: for Moshar, type:   !moshar  ].
+            
+        } else if(command === global_command[2]){
+            console.log('hi')
 
-            3. Make sure the image is clear, then send it,
+            try{
+                const res = await axios.post(`${cloudURL}/add_player`,`${args}`)
+                .then((response)=>{
+                    console.log('Player added:', response.data )
+                    await message.channel.send(`player successfully included, ${args}`)
 
-            I can also handle multiple images at once!
+                })                
+            }catch(error){
+                console.error('Error adding players', error)
+            }
+            
 
-            4. When the job is completed, I will @  mention you.
+        } else if(command === global_command[3]){
+            console.log('bye')
 
-            Need the command for each boss? send: "  !com  "`);
-        }
+            axios.delete(`${cloudURL}/remove_player/${args}`)
+            .then((response) => {
+              console.log('Player removed:', response.data);
+              await message.channel.send(`player successfully removed from the list ${args}`)
+
+            })
+            .catch((error) => {
+              console.error('Error removing player:', error);
+              await message.channel.send(`player unsuccessfully changed to ${args}`)
+
+            });
+
+
+        } else if(command === global_command[4]){
+            console.log('rate')
+
+            axios.patch(`${cloudURL}/update_threshold/`, {
+                rate: args
+              })
+                .then((response) => {
+                  console.log('Threshold updated:', response.data);
+                  await message.channel.send(`thresh_rate successfully changed to ${args}`)
+                })
+                .catch((error) => {
+                  console.error('Error updating player:', error);
+                });            
+
+
+        } else if(command === global_command[5]){
+            console.log('names')
+
+            try{
+                const res = await axios.get(`${cloudURL}/get_list`)
+                const dataList = await res.data.names
+                console.log(dataList)
+                const debuggingResults = await dataMessage.map(async (list)=>{
+                    await message.channel.send("`"+`${list}`+"`")
+
+                })
+            }catch(error){
+                console.error(error)
+            }
+
+        } 
+
 
     }
 
 
+
+       
     //==========================================   IMAGE PROCESSING  ==========================================
 
     // Check for attachments and URLs in the message
@@ -117,14 +194,14 @@ client.on('message', async (message) => {
     if (imageURLs.length > 0) {
         const { bossName } = extractImageUrlAndBossName(message);
 
-        if (bossName) {
+        if (bossName != 'teabug') {
             try {
                 const proc = await message.channel.send(`Processing ${imageURLs.length} image(s)...`);
 
                 // Process all image URLs concurrently
                 const allUsernames = await Promise.all(
                     imageURLs.map(async (imageUrl) => {
-                        const response = await axios.get(`${cloudURL}=${imageUrl}`);
+                        const response = await axios.get(`${cloudURL}/process?url=${imageUrl}`);
                         const dataNames = response.data.names;
                         proc.edit(`Reading.... [ ${dataNames.join((' | '))} ]`)
                         return dataNames.filter((username) => username);
@@ -153,6 +230,7 @@ client.on('message', async (message) => {
                 message.reply('An error occurred while processing the images.');
                 console.error(error);
             }
+        
         }
     }
 });
@@ -267,8 +345,10 @@ const sheetMap = {
     'BB': 'FB BLACKBLOOD',
     'TK': 'FB TOMB KING',
     'CENT': 'FB CENTEPEDEUS',
-    'CK': 'FB CAPRIS KING'
+    'CK': 'FB CAPRIS KING',
+    'WB': 'WB GUARDIAN'
 };
+
 const nameMap = {
     '你爸爸' :'你爸爸 (New BBC)',
     '你野':'你野爹 (Piggy)',
@@ -365,5 +445,3 @@ async function findUserRow(sheetName, username, column) {
 
     return rowNumber;
 }
-
-
