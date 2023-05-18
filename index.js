@@ -117,10 +117,10 @@ client.on('message', async (message) => {
             console.log('hi')
 
             try{
-                const res = await axios.post(`${cloudURL}/add_player`,`${args}`)
+                const res = axios.post(`${cloudURL}/add_player`,`${args}`)
                 .then((response)=>{
                     console.log('Player added:', response.data )
-                    await message.channel.send(`player successfully included, ${args}`)
+                    message.channel.send(`player successfully included`)
 
                 })                
             }catch(error){
@@ -134,12 +134,12 @@ client.on('message', async (message) => {
             axios.delete(`${cloudURL}/remove_player/${args}`)
             .then((response) => {
               console.log('Player removed:', response.data);
-              await message.channel.send(`player successfully removed from the list ${args}`)
+              message.channel.send(`player successfully removed from the list ${args}`)
 
             })
             .catch((error) => {
               console.error('Error removing player:', error);
-              await message.channel.send(`player unsuccessfully changed to ${args}`)
+              message.channel.send(`player unsuccessfully changed to ${args}`)
 
             });
 
@@ -152,7 +152,7 @@ client.on('message', async (message) => {
               })
                 .then((response) => {
                   console.log('Threshold updated:', response.data);
-                  await message.channel.send(`thresh_rate successfully changed to ${args}`)
+                  message.channel.send(`thresh_rate successfully changed to ${args}`)
                 })
                 .catch((error) => {
                   console.error('Error updating player:', error);
@@ -166,10 +166,8 @@ client.on('message', async (message) => {
                 const res = await axios.get(`${cloudURL}/get_list`)
                 const dataList = await res.data.names
                 console.log(dataList)
-                const debuggingResults = await dataMessage.map(async (list)=>{
-                    await message.channel.send("`"+`${list}`+"`")
+                message.channel.send(dataList)
 
-                })
             }catch(error){
                 console.error(error)
             }
@@ -346,7 +344,8 @@ const sheetMap = {
     'TK': 'FB TOMB KING',
     'CENT': 'FB CENTEPEDEUS',
     'CK': 'FB CAPRIS KING',
-    'WB': 'WB GUARDIAN'
+    'WB': 'WB GUARDIAN',
+    'BIP': 'Basic Item Price'
 };
 
 const nameMap = {
