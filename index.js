@@ -91,9 +91,7 @@ client.on('message', async (message) => {
 
             `);
         } else if (command === global_command[1]) {
-            message.reply(` 
-                was there a mistake?
-                ${cloudURL}/debug?url=${args}
+            message.reply(`did I miss someone? Here's what I see:
             
             `)
             try{
@@ -116,16 +114,14 @@ client.on('message', async (message) => {
         } else if(command === global_command[2]){
             console.log('hi')
 
-            try{
-                const res = axios.post(`${cloudURL}/add_player`,`${args}`)
-                .then((response)=>{
-                    console.log('Player added:', response.data )
-                    message.channel.send(`player successfully included`)
-
-                })                
-            }catch(error){
-                console.error('Error adding players', error)
-            }
+            try {
+                const res = await axios.post(`${cloudURL}/add_player/${args}`);
+                console.log('Player added:', res.data);
+                message.channel.send(`${res.data.message}, ${res.data.new_players}`);
+                
+              } catch (error) {
+                console.error('Error adding players', error);
+              }
             
 
         } else if(command === global_command[3]){
@@ -134,7 +130,7 @@ client.on('message', async (message) => {
             axios.delete(`${cloudURL}/remove_player/${args}`)
             .then((response) => {
               console.log('Player removed:', response.data);
-              message.channel.send(`player successfully removed from the list ${args}`)
+              message.channel.send(`${response.data.message}, ${response.data.removed_player}`)
 
             })
             .catch((error) => {
@@ -163,10 +159,12 @@ client.on('message', async (message) => {
             console.log('names')
 
             try{
+                const namesList = []
                 const res = await axios.get(`${cloudURL}/get_list`)
                 const dataList = await res.data.names
+                namesList.push(dataList.join(`   |   `))
                 console.log(dataList)
-                message.channel.send(dataList)
+                message.channel.send(namesList)
 
             }catch(error){
                 console.error(error)
